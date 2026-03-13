@@ -58,7 +58,7 @@ async function chiediAClaude(messaggi) {
   const res = await axios.post(
     'https://api.anthropic.com/v1/messages',
     {
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-opus-4-5',
       max_tokens: 500,
       system: SYSTEM_PROMPT,
       messages: messaggi,
@@ -140,4 +140,5 @@ app.post('/webhook', async (req, res) => {
 
 app.listen(process.env.PORT || 3000, () => {
   console.log('The DOME Studio Bot — in ascolto sulla porta', process.env.PORT || 3000);
+
 });

@@ -64,11 +64,12 @@ async function chiediAClaude(messaggi) {
       messages: messaggi,
     },
     {
-      headers: {
-        'x-api-key': CLAUDE_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
+     headers: {
+  'x-api-key': CLAUDE_API_KEY,
+  'anthropic-version': '2023-06-01',
+  'anthropic-beta': 'messages-2023-12-15',
+  'content-type': 'application/json',
+},
     }
   );
   return res.data.content[0].text;
@@ -142,5 +143,6 @@ app.listen(process.env.PORT || 3000, () => {
   console.log('The DOME Studio Bot — in ascolto sulla porta', process.env.PORT || 3000);
 
 });
+
 
 

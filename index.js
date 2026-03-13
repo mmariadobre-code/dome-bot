@@ -212,7 +212,7 @@ async function sendQuickReplies(sid, text) {
           },
           {
             content_type: 'text',
-            title: '✨ Lista attesa',
+            title: '🤎 Lista attesa',
             payload: 'LISTA_ATTESA'
           },
           {
@@ -232,8 +232,9 @@ async function sendQuickReplies(sid, text) {
 async function sendMainMenu(sid) {
   const text =
     'Ciao e benvenuta in The DŌME Studio ✨\n' +
+    'Sono felicissima di aiutarti 🤍\n' +
     'Sarà uno spazio dedicato al Pilates Reformer, pensato per offrire un’esperienza curata, elegante e accogliente.\n' +
-    'Se vuoi, puoi scoprire qualcosa in più qui sotto 🤍';
+    'Se vuoi, puoi scoprire qualcosa in più qui sotto 💅';
 
   await sendQuickReplies(sid, text);
 }
@@ -290,7 +291,7 @@ app.post('/webhook', async (req, res) => {
       c.fase = 'attendi_tel';
 
       const reply =
-        `Che piacere ${userText} ✨\n` +
+        `Che piacere ${userText} 💅\n` +
         `Mi lasci anche il tuo numero di telefono così possiamo ricontattarti appena avremo novità?`;
 
       c.msgs.push({ role: 'assistant', content: reply });
@@ -305,8 +306,9 @@ app.post('/webhook', async (req, res) => {
       await salvaSheet(c.dati.nome, userText, sid);
 
       const reply =
-        'Perfetto, ti abbiamo inserita nella lista d’attesa ✨\n' +
-        'Ti contatteremo appena avremo novità sull’apertura. A presto 🤍';
+        'Perfetto, ti abbiamo inserita nella lista d’attesa 🤎\n' +
+        'Ti contatteremo appena avremo novità sull’apertura e sui pacchetti dedicati.\n' +
+        'A presto 💅';
 
       c.msgs.push({ role: 'assistant', content: reply });
       await sendText(sid, reply);
@@ -319,7 +321,7 @@ app.post('/webhook', async (req, res) => {
         '• Lezione di gruppo Reformer: 35€ a persona\n' +
         '• Lezione Duo, se desideri allenarti con un’amica: 40€ a persona\n' +
         '• Lezione individuale: 70€\n\n' +
-        'Per chi desidera allenarsi con regolarità ci saranno anche pacchetti più convenienti, ad esempio 8 lezioni a 240€, da utilizzare entro 30 giorni dall’attivazione 🤍\n\n' +
+        'Per chi desidera allenarsi con regolarità ci saranno anche pacchetti più convenienti, ad esempio 8 lezioni a 240€, da utilizzare entro 30 giorni dall’attivazione 🤎\n\n' +
         'Prima dell’apertura verranno comunque presentati anche altri pacchetti dedicati ✨';
 
       c.msgs.push({ role: 'assistant', content: reply });
@@ -330,7 +332,7 @@ app.post('/webhook', async (req, res) => {
     if (payload === 'DOVE_SIAMO') {
       const reply =
         'The DŌME Studio aprirà a San Lazzaro di Savena, in zona 051 Bologna 📍\n' +
-        'La posizione precisa sarà comunicata più avanti.';
+        'La posizione precisa sarà comunicata più avanti 🤍';
 
       c.msgs.push({ role: 'assistant', content: reply });
       await sendQuickReplies(sid, reply);
@@ -340,7 +342,7 @@ app.post('/webhook', async (req, res) => {
     if (payload === 'COME_FUNZIONA') {
       const reply =
         'The DŌME Studio sarà uno spazio dedicato esclusivamente al Pilates Reformer, con un’atmosfera curata e un approccio premium 🤍\n' +
-        'L’idea è offrire un’esperienza intima, elegante e su misura.';
+        'L’idea è offrire un’esperienza intima, elegante e su misura ✨';
 
       c.msgs.push({ role: 'assistant', content: reply });
       await sendQuickReplies(sid, reply);
@@ -421,5 +423,6 @@ app.listen(PORT, () => {
     !!(GOOGLE_CREDS && Object.keys(GOOGLE_CREDS).length > 0)
   );
 });
+
 
 

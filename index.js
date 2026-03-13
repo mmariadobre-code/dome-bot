@@ -101,10 +101,7 @@ function isGreeting(text) {
 
 async function salvaSheet(nome, tel, sid) {
   try {
-    if (!SHEET_ID) {
-      throw new Error('SHEET_ID mancante');
-    }
-
+    if (!SHEET_ID) throw new Error('SHEET_ID mancante');
     if (!GOOGLE_CREDS || Object.keys(GOOGLE_CREDS).length === 0) {
       throw new Error('GOOGLE_CREDS mancanti o non validi');
     }
@@ -172,9 +169,7 @@ async function claude(msgs) {
 }
 
 async function sendText(sid, text) {
-  if (!PAGE_TOKEN) {
-    throw new Error('PAGE_TOKEN mancante');
-  }
+  if (!PAGE_TOKEN) throw new Error('PAGE_TOKEN mancante');
 
   await axios.post(
     `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_TOKEN}`,
@@ -182,16 +177,12 @@ async function sendText(sid, text) {
       recipient: { id: sid },
       message: { text },
     },
-    {
-      timeout: 30000,
-    }
+    { timeout: 30000 }
   );
 }
 
 async function sendQuickReplies(sid, text) {
-  if (!PAGE_TOKEN) {
-    throw new Error('PAGE_TOKEN mancante');
-  }
+  if (!PAGE_TOKEN) throw new Error('PAGE_TOKEN mancante');
 
   await axios.post(
     `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_TOKEN}`,
@@ -223,9 +214,7 @@ async function sendQuickReplies(sid, text) {
         ]
       },
     },
-    {
-      timeout: 30000,
-    }
+    { timeout: 30000 }
   );
 }
 
@@ -269,12 +258,10 @@ app.post('/webhook', async (req, res) => {
 
     const sid = entry?.sender?.id;
     const txt = entry?.message?.text?.trim();
-    const payload = entry?.message?.quick_reply?.payload;
+    const quickPayload = entry?.message?.quick_reply?.payload;
+    const postbackPayload = entry?.postback?.payload;
 
     if (!sid) return;
-
-    const userText = txt || payload;
-    if (!userText) return;
 
     if (!conv[sid]) {
       conv[sid] = {
@@ -285,6 +272,14 @@ app.post('/webhook', async (req, res) => {
     }
 
     const c = conv[sid];
+
+    if (postbackPayload === 'GET_STARTED') {
+      await sendMainMenu(sid);
+      return;
+    }
+
+    const userText = txt || quickPayload;
+    if (!userText) return;
 
     if (c.fase === 'attendi_nome') {
       c.dati.nome = userText;
@@ -315,7 +310,7 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
-    if (payload === 'PREZZI') {
+    if (quickPayload === 'PREZZI') {
       const reply =
         'Queste saranno le tariffe indicative di The DŌME Studio ✨\n\n' +
         '• Lezione di gruppo Reformer: 35€ a persona\n' +
@@ -329,7 +324,7 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
-    if (payload === 'DOVE_SIAMO') {
+    if (quickPayload === 'DOVE_SIAMO') {
       const reply =
         'The DŌME Studio aprirà a San Lazzaro di Savena, in zona 051 Bologna 📍\n' +
         'La posizione precisa sarà comunicata più avanti 🤍';
@@ -339,7 +334,7 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
-    if (payload === 'COME_FUNZIONA') {
+    if (quickPayload === 'COME_FUNZIONA') {
       const reply =
         'The DŌME Studio sarà uno spazio dedicato esclusivamente al Pilates Reformer, con un’atmosfera curata e un approccio premium 🤍\n' +
         'L’idea è offrire un’esperienza intima, elegante e su misura ✨';
@@ -349,7 +344,7 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
-    if (payload === 'LISTA_ATTESA') {
+    if (quickPayload === 'LISTA_ATTESA') {
       c.fase = 'attendi_nome';
 
       const reply =
@@ -414,15 +409,6 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log('Bot in ascolto sulla porta', PORT);
-  console.log('VERIFY_TOKEN loaded:', !!VERIFY_TOKEN);
-  console.log('PAGE_TOKEN loaded:', !!PAGE_TOKEN);
-  console.log('CLAUDE_API_KEY loaded:', !!CLAUDE_API_KEY);
-  console.log('SHEET_ID loaded:', !!SHEET_ID);
-  console.log(
-    'GOOGLE_CREDS loaded:',
-    !!(GOOGLE_CREDS && Object.keys(GOOGLE_CREDS).length > 0)
-  );
 });
-
 
 

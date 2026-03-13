@@ -129,7 +129,7 @@ app.post('/webhook', async (req, res) => {
 
     await send(sid, r);
   } catch(e) {
-    console.log('Error:', e.message);
+    console.log('Error:', e.message, JSON.stringify(e.response?.data));
     try {
       const sid = req.body?.entry?.[0]?.messaging?.[0]?.sender?.id;
       if (sid) await send(sid, 'Scusa, problema tecnico momentaneo. Riprova! 🙏');
@@ -139,6 +139,7 @@ app.post('/webhook', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('Bot in ascolto sulla porta', PORT));
+
 
 
 

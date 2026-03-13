@@ -4,37 +4,40 @@ const { google } = require('googleapis');
 const app = express();
 app.use(express.json());
 
-const VERIFY_TOKEN    = process.env.VERIFY_TOKEN;
-const PAGE_TOKEN      = process.env.PAGE_TOKEN;
-const CLAUDE_API_KEY  = process.env.CLAUDE_API_KEY;
-const SHEET_ID        = process.env.SHEET_ID;
-const GOOGLE_CREDS    = JSON.parse(process.env.GOOGLE_CREDS || '{}');
+const VERIFY_TOKEN   = process.env.VERIFY_TOKEN;
+const PAGE_TOKEN     = process.env.PAGE_TOKEN;
+const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY;
+const SHEET_ID       = process.env.SHEET_ID;
+
+let GOOGLE_CREDS = {};
+try {
+  GOOGLE_CREDS = JSON.parse(process.env.GOOGLE_CREDS || '{}');
+} catch(e) {
+  console.log('GOOGLE_CREDS parse error:', e.message);
+}
 
 const SYSTEM_PROMPT = `Sei l'assistente virtuale di The DŌME Studio, uno studio di Pilates Reformer premium in apertura a San Lazzaro di Savena (Zona 051, Bologna).
 
-INFORMAZIONI SULLO STUDIO:
-- Nome: The DŌME Studio
-- Zona: 051 — San Lazzaro di Savena, Bologna
-- Disciplina: Pilates Reformer
-- Stato: in apertura (non ancora aperto)
-- Pacchetto pre-apertura: 8 lezioni a 240€, utilizzabili entro 30 giorni
-- Prima dell'apertura ci saranno altre tipologie di pacchetti
+INFORMAZIONI:
+- Zona 051, San Lazzaro di Savena, Bologna
+- Pilates Reformer
+- In apertura, non ancora aperto
+- Pacchetto pre-apertura: 8 lezioni 240€ entro 30 giorni
+- Prima dell'apertura ci saranno altri pacchetti
 
-ISTRUZIONI:
+REGOLE:
 - Rispondi sempre in italiano
-- Tono caldo, professionale, conciso (max 3-4 frasi per messaggio)
-- Non usare elenchi puntati, scrivi in modo conversazionale
-- Non promettere date di apertura specifiche
+- Tono caldo e professionale
+- Risposte brevi (max 3-4 frasi)
+- Niente elenchi puntati
+- Non promettere date di apertura
 
-FLUSSO LISTA D'ATTESA:
-Quando la persona esprime interesse a essere contattata:
-1. Chiedi nome e cognome
-2. Chiedi il numero di telefono
-3. Conferma che la contatterai all'apertura`;
+LISTA D'ATTESA:
+Quando qualcuno vuole essere contattato: chiedi nome e cognome, poi telefono, poi conferma.`;
 
-const conversazioni = {};
+const conv = {};
 
-async function salvaInSheet(nome, telefono, senderId) {
+async function salvaSheet(nome, tel, sid) {
   try {
     const auth = new google.auth.GoogleAuth({
       credentials: GOOGLE_CREDS,
@@ -46,103 +49,97 @@ async function salvaInSheet(nome, telefono, senderId) {
       spreadsheetId: SHEET_ID,
       range: 'Lista!A:D',
       valueInputOption: 'RAW',
-      requestBody: { values: [[data, nome, telefono, senderId]] },
+      requestBody: { values: [[data, nome, tel, sid]] },
     });
-    console.log(`Salvato: ${nome} — ${telefono}`);
-  } catch (err) {
-    console.error('Errore Google Sheets:', err.message);
+    console.log('Salvato:', nome, tel);
+  } catch(e) {
+    console.log('Sheets error:', e.message);
   }
 }
 
-async function chiediAClaude(messaggi) {
-  const res = await axios.post(
-    'https://api.anthropic.com/v1/messages',
-    {
-      model: 'claude-3-haiku-20240307',
-      max_tokens: 500,
-      system: SYSTEM_PROMPT,
-      messages: messaggi,
+async function claude(msgs) {
+  const r = await axios.post('https://api.anthropic.com/v1/messages', {
+    model: 'claude-3-5-haiku-20241022',
+    max_tokens: 400,
+    system: SYSTEM_PROMPT,
+    messages: msgs,
+  }, {
+    headers: {
+      'x-api-key': CLAUDE_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
     },
-    {
-     headers: {
-  'x-api-key': CLAUDE_API_KEY,
-  'anthropic-version': '2023-06-01',
-  'anthropic-beta': 'messages-2023-12-15',
-  'content-type': 'application/json',
-},
-    }
-  );
-  return res.data.content[0].text;
+  });
+  return r.data.content[0].text;
 }
 
-async function inviaMess(senderId, testo) {
+async function send(sid, text) {
   await axios.post(
     `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_TOKEN}`,
-    { recipient: { id: senderId }, message: { text: testo } }
+    { recipient: { id: sid }, message: { text } }
   );
 }
 
 app.get('/webhook', (req, res) => {
   if (req.query['hub.verify_token'] === VERIFY_TOKEN) {
     res.send(req.query['hub.challenge']);
-  } else {
-    res.sendStatus(403);
-  }
+  } else res.sendStatus(403);
 });
+
+app.get('/', (req, res) => res.send('The DOME Studio Bot is running!'));
 
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
-  const entry = req.body?.entry?.[0]?.messaging?.[0];
-  if (!entry?.message?.text) return;
-
-  const senderId = entry.sender.id;
-  const testo = entry.message.text.trim();
-
-  if (!conversazioni[senderId]) {
-    conversazioni[senderId] = { messaggi: [], fase: 'chat', dati: {} };
-  }
-  const conv = conversazioni[senderId];
-  conv.messaggi.push({ role: 'user', content: testo });
-
   try {
-    if (conv.fase === 'attendi_nome') {
-      conv.dati.nome = testo;
-      conv.fase = 'attendi_telefono';
-      const risposta = `Perfetto ${testo}! 😊 E il tuo numero di telefono? Ti contatteremo lì appena siamo pronti ad aprire.`;
-      conv.messaggi.push({ role: 'assistant', content: risposta });
-      await inviaMess(senderId, risposta);
+    const entry = req.body?.entry?.[0]?.messaging?.[0];
+    if (!entry?.message?.text) return;
+
+    const sid = entry.sender.id;
+    const txt = entry.message.text.trim();
+
+    if (!conv[sid]) conv[sid] = { msgs: [], fase: 'chat', dati: {} };
+    const c = conv[sid];
+    c.msgs.push({ role: 'user', content: txt });
+
+    if (c.fase === 'attendi_nome') {
+      c.dati.nome = txt;
+      c.fase = 'attendi_tel';
+      const r = `Perfetto ${txt}! 😊 E il tuo numero di telefono?`;
+      c.msgs.push({ role: 'assistant', content: r });
+      await send(sid, r);
       return;
     }
 
-    if (conv.fase === 'attendi_telefono') {
-      conv.dati.telefono = testo;
-      conv.fase = 'completato';
-      await salvaInSheet(conv.dati.nome, conv.dati.telefono, senderId);
-      const risposta = `Ottimo! Ho inserito ${conv.dati.nome} (${testo}) nella nostra lista ✨ Ti contatteremo appena avremo novità sull'apertura. A presto!`;
-      conv.messaggi.push({ role: 'assistant', content: risposta });
-      await inviaMess(senderId, risposta);
+    if (c.fase === 'attendi_tel') {
+      c.dati.tel = txt;
+      c.fase = 'done';
+      await salvaSheet(c.dati.nome, txt, sid);
+      const r = `Ottimo! Ho inserito ${c.dati.nome} nella lista ✨ Ti contatteremo appena avremo novità. A presto!`;
+      c.msgs.push({ role: 'assistant', content: r });
+      await send(sid, r);
       return;
     }
 
-    const risposta = await chiediAClaude(conv.messaggi);
-    conv.messaggi.push({ role: 'assistant', content: risposta });
+    const r = await claude(c.msgs);
+    c.msgs.push({ role: 'assistant', content: r });
 
-    const triggerLista = ['nome e cognome', 'come ti chiami', 'qual è il tuo nome', 'lista d\'attesa'];
-    if (triggerLista.some(t => risposta.toLowerCase().includes(t)) && conv.fase === 'chat') {
-      conv.fase = 'attendi_nome';
+    if (r.toLowerCase().includes('nome') && c.fase === 'chat') {
+      c.fase = 'attendi_nome';
     }
 
-    await inviaMess(senderId, risposta);
-  } catch (err) {
-    console.error('Errore:', err.message);
-    await inviaMess(senderId, 'Scusa, si è verificato un piccolo problema tecnico. Riprova tra un momento!');
+    await send(sid, r);
+  } catch(e) {
+    console.log('Error:', e.message);
+    try {
+      const sid = req.body?.entry?.[0]?.messaging?.[0]?.sender?.id;
+      if (sid) await send(sid, 'Scusa, problema tecnico momentaneo. Riprova! 🙏');
+    } catch(_) {}
   }
 });
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log('The DOME Studio Bot — in ascolto sulla porta', process.env.PORT || 3000);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log('Bot in ascolto sulla porta', PORT));
 
-});
 
 
 

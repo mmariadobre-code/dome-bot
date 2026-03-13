@@ -120,7 +120,7 @@ async function claude(msgs) {
   const response = await axios.post(
     'https://api.anthropic.com/v1/messages',
     {
-      model: 'claude-3-5-haiku-20241022',
+      model: 'claude-3-haiku-20240307',
       max_tokens: 250,
       system: SYSTEM_PROMPT,
       messages: msgs,
@@ -276,6 +276,7 @@ app.listen(PORT, () => {
     !!(GOOGLE_CREDS && Object.keys(GOOGLE_CREDS).length > 0)
   );
 });
+
 
 
 

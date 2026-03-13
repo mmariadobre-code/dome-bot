@@ -22,22 +22,25 @@ Sei l'assistente virtuale di The DŌME Studio, uno studio di Pilates Reformer pr
 
 Informazioni certe:
 - Lo studio è in apertura, non ancora aperto
-- Sarà dedicato al Pilates Reformer
+- Sarà dedicato esclusivamente al Pilates Reformer
 - Pacchetto pre-apertura: 8 lezioni a 240€, utilizzabili entro 30 giorni
 - Prima dell'apertura potranno esserci anche altri pacchetti
 - Non dare mai date certe di apertura se non sono esplicitamente confermate
+- La posizione precisa sarà comunicata più avanti
 
 Regole di risposta:
 - Rispondi sempre in italiano
-- Tono caldo, curato e professionale
+- Tono caldo, elegante, professionale e accogliente
 - Risposte brevi, massimo 3-4 frasi
 - Non usare elenchi puntati
 - Non inventare informazioni
-- Se una persona vuole essere ricontattata, iscriversi, lasciare il contatto, entrare in lista d'attesa o avere novità sull'apertura, chiedi il nome e cognome in modo naturale
+- Se una persona vuole essere ricontattata, iscriversi, lasciare il contatto, entrare in lista d'attesa o avere novità sull'apertura, chiedi nome e cognome in modo naturale
+- Mantieni uno stile premium, delicato e curato
 
 Obiettivo:
 - Rispondere alle domande sullo studio
 - Accompagnare con gentilezza chi vuole entrare in lista d’attesa
+- Far percepire il brand come esclusivo, raffinato e accogliente
 `;
 
 const conv = {};
@@ -71,10 +74,26 @@ function isLikelyWaitlistRequest(text) {
     'lasciare il numero',
     'lascio il numero',
     'essere contattata',
-    'essere contattato'
+    'essere contattato',
+    'mi interessa',
+    'sono interessata',
+    'sono interessato'
   ];
 
   return keywords.some(k => t.includes(k));
+}
+
+function isGreeting(text) {
+  const t = (text || '').toLowerCase().trim();
+  const greetings = [
+    'ciao',
+    'salve',
+    'hey',
+    'buongiorno',
+    'buonasera',
+    'hello'
+  ];
+  return greetings.includes(t);
 }
 
 async function salvaSheet(nome, tel, sid) {
@@ -117,8 +136,6 @@ async function claude(msgs) {
     throw new Error('CLAUDE_API_KEY mancante');
   }
 
-  console.log('Invio richiesta a Claude...');
-
   const response = await axios.post(
     'https://api.anthropic.com/v1/messages',
     {
@@ -137,8 +154,6 @@ async function claude(msgs) {
     }
   );
 
-  console.log('Claude status OK');
-
   const blocks = response?.data?.content || [];
   const text = blocks
     .filter(block => block.type === 'text' && block.text)
@@ -153,7 +168,7 @@ async function claude(msgs) {
   return text;
 }
 
-async function send(sid, text) {
+async function sendText(sid, text) {
   if (!PAGE_TOKEN) {
     throw new Error('PAGE_TOKEN mancante');
   }
@@ -168,6 +183,56 @@ async function send(sid, text) {
       timeout: 30000,
     }
   );
+}
+
+async function sendQuickReplies(sid, text) {
+  if (!PAGE_TOKEN) {
+    throw new Error('PAGE_TOKEN mancante');
+  }
+
+  await axios.post(
+    `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_TOKEN}`,
+    {
+      recipient: { id: sid },
+      message: {
+        text,
+        quick_replies: [
+          {
+            content_type: 'text',
+            title: '💫 Prezzi',
+            payload: 'PREZZI'
+          },
+          {
+            content_type: 'text',
+            title: '📍 Dove siamo',
+            payload: 'DOVE_SIAMO'
+          },
+          {
+            content_type: 'text',
+            title: '✨ Lista d’attesa',
+            payload: 'LISTA_ATTESA'
+          },
+          {
+            content_type: 'text',
+            title: '🤍 Lo studio',
+            payload: 'COME_FUNZIONA'
+          }
+        ]
+      },
+    },
+    {
+      timeout: 30000,
+    }
+  );
+}
+
+async function sendMainMenu(sid) {
+  const text =
+    'Ciao e benvenuta in The DŌME Studio ✨\n' +
+    'Sarà uno spazio dedicato al Pilates Reformer, pensato per offrire un’esperienza curata, elegante e accogliente.\n' +
+    'Se vuoi, puoi scoprire qualcosa in più qui sotto 🤍';
+
+  await sendQuickReplies(sid, text);
 }
 
 app.get('/', (req, res) => {
@@ -195,18 +260,17 @@ app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
 
   try {
-    console.log('WEBHOOK BODY:', JSON.stringify(req.body, null, 2));
-
     const entry = req.body?.entry?.[0]?.messaging?.[0];
     if (!entry) return;
 
     const sid = entry?.sender?.id;
     const txt = entry?.message?.text?.trim();
+    const payload = entry?.message?.quick_reply?.payload;
 
-    console.log('SID:', sid);
-    console.log('TXT:', txt);
+    if (!sid) return;
 
-    if (!sid || !txt) return;
+    const userText = txt || payload;
+    if (!userText) return;
 
     if (!conv[sid]) {
       conv[sid] = {
@@ -217,46 +281,106 @@ app.post('/webhook', async (req, res) => {
     }
 
     const c = conv[sid];
-    c.msgs.push({ role: 'user', content: txt });
 
     if (c.fase === 'attendi_nome') {
-      c.dati.nome = txt;
+      c.dati.nome = userText;
       c.fase = 'attendi_tel';
 
-      const reply = `Perfetto ${txt} ✨ Mi lasci anche il tuo numero di telefono così possiamo ricontattarti appena avremo novità?`;
+      const reply =
+        `Che piacere ${userText} ✨\n` +
+        `Mi lasci anche il tuo numero di telefono così possiamo ricontattarti appena avremo novità?`;
+
       c.msgs.push({ role: 'assistant', content: reply });
-      await send(sid, reply);
+      await sendText(sid, reply);
       return;
     }
 
     if (c.fase === 'attendi_tel') {
-      c.dati.tel = txt;
+      c.dati.tel = userText;
       c.fase = 'done';
 
-      await salvaSheet(c.dati.nome, txt, sid);
+      await salvaSheet(c.dati.nome, userText, sid);
 
-      const reply = `Perfetto, ti abbiamo inserita nella lista d’attesa ✨ Ti contatteremo appena avremo novità sull’apertura. A presto!`;
+      const reply =
+        'Perfetto, ti abbiamo inserita nella lista d’attesa ✨\n' +
+        'Ti contatteremo appena avremo novità sull’apertura. A presto 🤍';
+
       c.msgs.push({ role: 'assistant', content: reply });
-      await send(sid, reply);
+      await sendText(sid, reply);
       return;
     }
 
-    if (c.fase === 'chat' && isLikelyWaitlistRequest(txt)) {
+    if (payload === 'PREZZI') {
+      const reply =
+        'Abbiamo un pacchetto pre-apertura da 8 lezioni a 240€, utilizzabili entro 30 giorni ✨\n' +
+        'Prima dell’apertura potranno esserci anche altre proposte dedicate.';
+
+      c.msgs.push({ role: 'assistant', content: reply });
+      await sendQuickReplies(sid, reply);
+      return;
+    }
+
+    if (payload === 'DOVE_SIAMO') {
+      const reply =
+        'The DŌME Studio aprirà a San Lazzaro di Savena, in zona 051 Bologna 📍\n' +
+        'La posizione precisa sarà comunicata più avanti.';
+
+      c.msgs.push({ role: 'assistant', content: reply });
+      await sendQuickReplies(sid, reply);
+      return;
+    }
+
+    if (payload === 'COME_FUNZIONA') {
+      const reply =
+        'The DŌME Studio sarà uno spazio dedicato esclusivamente al Pilates Reformer, con un’atmosfera curata e un approccio premium 🤍\n' +
+        'L’idea è offrire un’esperienza intima, elegante e su misura.';
+
+      c.msgs.push({ role: 'assistant', content: reply });
+      await sendQuickReplies(sid, reply);
+      return;
+    }
+
+    if (payload === 'LISTA_ATTESA') {
       c.fase = 'attendi_nome';
-      const reply = `Con piacere ✨ Per inserirti in lista d’attesa mi lasci nome e cognome?`;
+
+      const reply =
+        'Con molto piacere ✨\n' +
+        'Per inserirti in lista d’attesa mi lasci nome e cognome?';
+
       c.msgs.push({ role: 'assistant', content: reply });
-      await send(sid, reply);
+      await sendText(sid, reply);
       return;
     }
+
+    if (c.fase === 'chat' && isGreeting(userText)) {
+      await sendMainMenu(sid);
+      return;
+    }
+
+    if (c.fase === 'chat' && isLikelyWaitlistRequest(userText)) {
+      c.fase = 'attendi_nome';
+
+      const reply =
+        'Con piacere ✨\n' +
+        'Per inserirti in lista d’attesa mi lasci nome e cognome?';
+
+      c.msgs.push({ role: 'assistant', content: reply });
+      await sendText(sid, reply);
+      return;
+    }
+
+    c.msgs.push({ role: 'user', content: userText });
 
     const reply = await claude(c.msgs);
     c.msgs.push({ role: 'assistant', content: reply });
 
     if (c.fase === 'chat' && reply.toLowerCase().includes('nome e cognome')) {
       c.fase = 'attendi_nome';
+      await sendText(sid, reply);
+      return;
     }
 
-    await send(sid, reply);
+    await sendQuickReplies(sid, reply);
   } catch (e) {
     console.log('===== BOT ERROR =====');
     console.log('Message:', e.message);
@@ -266,9 +390,9 @@ app.post('/webhook', async (req, res) => {
     try {
       const sid = req.body?.entry?.[0]?.messaging?.[0]?.sender?.id;
       if (sid) {
-        await send(
+        await sendText(
           sid,
-          'Scusa, c’è stato un piccolo problema tecnico momentaneo. Riprova tra poco 🙏'
+          'Scusa, c’è stato un piccolo problema tecnico momentaneo 🙏 Riprova tra poco.'
         );
       }
     } catch (sendError) {
@@ -290,7 +414,5 @@ app.listen(PORT, () => {
     !!(GOOGLE_CREDS && Object.keys(GOOGLE_CREDS).length > 0)
   );
 });
-
-
 
 

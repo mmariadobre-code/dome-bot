@@ -23,8 +23,11 @@ Sei l'assistente virtuale di The DŌME Studio, uno studio di Pilates Reformer pr
 Informazioni certe:
 - Lo studio è in apertura, non ancora aperto
 - Sarà dedicato esclusivamente al Pilates Reformer
-- Pacchetto pre-apertura: 8 lezioni a 240€, utilizzabili entro 30 giorni
-- Prima dell'apertura potranno esserci anche altri pacchetti
+- Lezione di gruppo Reformer: 35€ a persona
+- Lezione Duo: 40€ a persona
+- Lezione individuale: 70€
+- Ci saranno anche pacchetti più convenienti, ad esempio 8 lezioni a 240€, da utilizzare entro 30 giorni dall’attivazione
+- Prima dell’apertura potranno esserci anche altri pacchetti
 - Non dare mai date certe di apertura se non sono esplicitamente confermate
 - La posizione precisa sarà comunicata più avanti
 
@@ -32,7 +35,7 @@ Regole di risposta:
 - Rispondi sempre in italiano
 - Tono caldo, elegante, professionale e accogliente
 - Risposte brevi, massimo 3-4 frasi
-- Non usare elenchi puntati
+- Non usare elenchi puntati, a meno che non serva per spiegare chiaramente i prezzi
 - Non inventare informazioni
 - Se una persona vuole essere ricontattata, iscriversi, lasciare il contatto, entrare in lista d'attesa o avere novità sull'apertura, chiedi nome e cognome in modo naturale
 - Mantieni uno stile premium, delicato e curato
@@ -209,7 +212,7 @@ async function sendQuickReplies(sid, text) {
           },
           {
             content_type: 'text',
-            title: '✨ Lista d’attesa',
+            title: '✨ Lista attesa',
             payload: 'LISTA_ATTESA'
           },
           {
@@ -312,8 +315,12 @@ app.post('/webhook', async (req, res) => {
 
     if (payload === 'PREZZI') {
       const reply =
-        'Abbiamo un pacchetto pre-apertura da 8 lezioni a 240€, utilizzabili entro 30 giorni ✨\n' +
-        'Prima dell’apertura potranno esserci anche altre proposte dedicate.';
+        'Queste saranno le tariffe indicative di The DŌME Studio ✨\n\n' +
+        '• Lezione di gruppo Reformer: 35€ a persona\n' +
+        '• Lezione Duo, se desideri allenarti con un’amica: 40€ a persona\n' +
+        '• Lezione individuale: 70€\n\n' +
+        'Per chi desidera allenarsi con regolarità ci saranno anche pacchetti più convenienti, ad esempio 8 lezioni a 240€, da utilizzare entro 30 giorni dall’attivazione 🤍\n\n' +
+        'Prima dell’apertura verranno comunque presentati anche altri pacchetti dedicati ✨';
 
       c.msgs.push({ role: 'assistant', content: reply });
       await sendQuickReplies(sid, reply);

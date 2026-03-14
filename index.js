@@ -218,10 +218,11 @@ app.post('/webhook', async (req, res) => {
     const c = conv[sid];
 
     // GET_STARTED come postback classico
-    if (postback === 'GET_STARTED') {
-      await sendMainMenu(sid);
-      return;
-    }
+if (postback) {
+  console.log('POSTBACK ricevuto:', postback);
+  await sendMainMenu(sid);
+  return;
+}
 
     // GET_STARTED come testo in alcune interfacce/client
     if (isGetStartedText(txt)) {

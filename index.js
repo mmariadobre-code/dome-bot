@@ -7,6 +7,7 @@ app.use(express.json());
 
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const PAGE_TOKEN = process.env.PAGE_TOKEN;
+const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY;
 const SHEET_ID = process.env.SHEET_ID;
 
 let GOOGLE_CREDS = {};
@@ -15,6 +16,27 @@ try {
 } catch (e) {
   console.log('GOOGLE_CREDS parse error:', e.message);
 }
+
+const SYSTEM_PROMPT = `
+Sei l'assistente virtuale di The DŌME Studio, uno studio di Pilates Reformer premium in apertura a San Lazzaro di Savena, zona 051 Bologna.
+
+Informazioni certe:
+- Lo studio è in apertura, non ancora aperto
+- Sarà dedicato esclusivamente al Pilates Reformer
+- Lezione di gruppo Reformer: 35€ a persona
+- Lezione Duo: 40€ a persona
+- Lezione individuale: 70€
+- Ci saranno anche pacchetti più convenienti, ad esempio 8 lezioni a 240€, da utilizzare entro 30 giorni dall’attivazione
+- Prima dell’apertura potranno esserci anche altri pacchetti
+- Non dare mai date certe di apertura se non sono esplicitamente confermate
+- La posizione precisa sarà comunicata più avanti
+
+Regole di risposta:
+- Rispondi sempre in italiano
+- Tono caldo, elegante e professionale
+- Risposte brevi
+- Non inventare informazioni
+`;
 
 const conv = {};
 
@@ -25,7 +47,6 @@ function isGreeting(text) {
 
 function isLikelyWaitlistRequest(text) {
   const t = (text || '').toLowerCase();
-
   const keywords = [
     'lista',
     "lista d'attesa",
@@ -45,8 +66,12 @@ function isLikelyWaitlistRequest(text) {
     'sono interessata',
     'sono interessato'
   ];
-
   return keywords.some(k => t.includes(k));
+}
+
+function isGetStartedText(text) {
+  const t = (text || '').toLowerCase().trim();
+  return t === 'get started' || t === 'inizia';
 }
 
 async function salvaSheet(nome, tel, sid) {
@@ -82,9 +107,31 @@ async function salvaSheet(nome, tel, sid) {
   }
 }
 
-async function sendText(sid, text) {
-  if (!PAGE_TOKEN) throw new Error('PAGE_TOKEN mancante');
+async function claude(msgs) {
+  if (!CLAUDE_API_KEY) throw new Error('CLAUDE_API_KEY mancante');
 
+  const response = await axios.post(
+    'https://api.anthropic.com/v1/messages',
+    {
+      model: 'claude-3-haiku-20240307',
+      max_tokens: 200,
+      system: SYSTEM_PROMPT,
+      messages: msgs,
+    },
+    {
+      headers: {
+        'x-api-key': CLAUDE_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      timeout: 30000,
+    }
+  );
+
+  return response.data.content[0].text;
+}
+
+async function sendText(sid, text) {
   const r = await axios.post(
     `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_TOKEN}`,
     {
@@ -93,13 +140,10 @@ async function sendText(sid, text) {
     },
     { timeout: 30000 }
   );
-
   console.log('sendText ok:', r.status);
 }
 
 async function sendQuickReplies(sid, text) {
-  if (!PAGE_TOKEN) throw new Error('PAGE_TOKEN mancante');
-
   const r = await axios.post(
     `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_TOKEN}`,
     {
@@ -116,7 +160,6 @@ async function sendQuickReplies(sid, text) {
     },
     { timeout: 30000 }
   );
-
   console.log('sendQuickReplies ok:', r.status);
 }
 
@@ -174,7 +217,14 @@ app.post('/webhook', async (req, res) => {
 
     const c = conv[sid];
 
+    // GET_STARTED come postback classico
     if (postback === 'GET_STARTED') {
+      await sendMainMenu(sid);
+      return;
+    }
+
+    // GET_STARTED come testo in alcune interfacce/client
+    if (isGetStartedText(txt)) {
       await sendMainMenu(sid);
       return;
     }
@@ -265,10 +315,11 @@ Un ambiente intimo, elegante e curato, pensato per offrire un’esperienza premi
       return;
     }
 
-    await sendQuickReplies(
-      sid,
-      `Che bello sentirti qui 🤍\nPer ora sto ancora imparando a rispondere a tutte le domande, ma posso già aiutarti con prezzi, studio e lista d’attesa 💅`
-    );
+    c.msgs.push({ role: 'user', content: userText });
+    const reply = await claude(c.msgs);
+    c.msgs.push({ role: 'assistant', content: reply });
+
+    await sendQuickReplies(sid, reply);
 
   } catch (e) {
     console.log('===== BOT ERROR =====');
